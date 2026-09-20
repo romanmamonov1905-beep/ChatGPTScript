@@ -1,0 +1,353 @@
+--// Purple + Black Admin / Debug Panel
+--// Put this LocalScript in StarterPlayer > StarterPlayerScripts
+
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+
+local LocalPlayer = Players.LocalPlayer
+
+--==================================================
+-- CONFIG
+--==================================================
+
+local PURPLE = Color3.fromRGB(145, 70, 255)
+local DARK = Color3.fromRGB(18, 14, 24)
+local DARK2 = Color3.fromRGB(28, 21, 38)
+local LIGHT = Color3.fromRGB(235, 225, 255)
+local RED = Color3.fromRGB(255, 80, 100)
+local GREEN = Color3.fromRGB(100, 255, 160)
+
+local ESP_ENABLED = false
+local PANEL_VISIBLE = true
+local HIGHLIGHTS = {}
+
+--==================================================
+-- GUI
+--==================================================
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "PurpleAdminPanel"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+local Main = Instance.new("Frame")
+Main.Name = "Main"
+Main.Size = UDim2.new(0, 470, 0, 310)
+Main.Position = UDim2.new(0.5, -235, 0.5, -155)
+Main.BackgroundColor3 = DARK
+Main.BorderSizePixel = 0
+Main.Parent = ScreenGui
+
+local Corner = Instance.new("UICorner")
+Corner.CornerRadius = UDim.new(0, 12)
+Corner.Parent = Main
+
+local Stroke = Instance.new("UIStroke")
+Stroke.Color = PURPLE
+Stroke.Thickness = 2
+Stroke.Parent = Main
+
+local TopBar = Instance.new("Frame")
+TopBar.Size = UDim2.new(1, 0, 0, 50)
+TopBar.BackgroundColor3 = DARK2
+TopBar.BorderSizePixel = 0
+TopBar.Parent = Main
+
+local TopCorner = Instance.new("UICorner")
+TopCorner.CornerRadius = UDim.new(0, 12)
+TopCorner.Parent = TopBar
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, -60, 1, 0)
+Title.Position = UDim2.new(0, 18, 0, 0)
+Title.BackgroundTransparency = 1
+Title.Text = "ADMIN PANEL"
+Title.TextColor3 = LIGHT
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 19
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.Parent = TopBar
+
+local Accent = Instance.new("Frame")
+Accent.Size = UDim2.new(0, 5, 1, 0)
+Accent.BackgroundColor3 = PURPLE
+Accent.BorderSizePixel = 0
+Accent.Parent = TopBar
+
+local CloseButton = Instance.new("TextButton")
+CloseButton.Size = UDim2.new(0, 40, 0, 34)
+CloseButton.Position = UDim2.new(1, -48, 0, 8)
+CloseButton.BackgroundColor3 = Color3.fromRGB(45, 25, 55)
+CloseButton.Text = "×"
+CloseButton.TextColor3 = LIGHT
+CloseButton.Font = Enum.Font.GothamBold
+CloseButton.TextSize = 22
+CloseButton.BorderSizePixel = 0
+CloseButton.Parent = TopBar
+
+local CloseCorner = Instance.new("UICorner")
+CloseCorner.CornerRadius = UDim.new(0, 8)
+CloseCorner.Parent = CloseButton
+
+local Content = Instance.new("Frame")
+Content.Size = UDim2.new(1, -30, 1, -70)
+Content.Position = UDim2.new(0, 15, 0, 60)
+Content.BackgroundTransparency = 1
+Content.Parent = Main
+
+local Grid = Instance.new("UIGridLayout")
+Grid.CellSize = UDim2.new(0, 210, 0, 48)
+Grid.CellPadding = UDim2.new(0, 10, 0, 10)
+Grid.Parent = Content
+
+--==================================================
+-- BUTTON CREATOR
+--==================================================
+
+local function CreateButton(text)
+	local Button = Instance.new("TextButton")
+	Button.BackgroundColor3 = DARK2
+	Button.Text = text
+	Button.TextColor3 = LIGHT
+	Button.Font = Enum.Font.GothamSemibold
+	Button.TextSize = 14
+	Button.BorderSizePixel = 0
+	Button.AutoButtonColor = false
+
+	local Corner = Instance.new("UICorner")
+	Corner.CornerRadius = UDim.new(0, 9)
+	Corner.Parent = Button
+
+	local ButtonStroke = Instance.new("UIStroke")
+	ButtonStroke.Color = Color3.fromRGB(65, 45, 80)
+	ButtonStroke.Thickness = 1
+	ButtonStroke.Parent = Button
+
+	Button.MouseEnter:Connect(function()
+		Button.BackgroundColor3 = Color3.fromRGB(40, 28, 52)
+	end)
+
+	Button.MouseLeave:Connect(function()
+		Button.BackgroundColor3 = DARK2
+	end)
+
+	Button.Parent = Content
+
+	return Button
+end
+
+--==================================================
+-- ESP / DEBUG HIGHLIGHT
+--==================================================
+
+local function AddHighlight(player)
+	if player == LocalPlayer then
+		return
+	end
+
+	local character = player.Character
+	if not character then
+		return
+	end
+
+	if HIGHLIGHTS[player] then
+		HIGHLIGHTS[player]:Destroy()
+	end
+
+	local Highlight = Instance.new("Highlight")
+	Highlight.Name = "AdminDebugHighlight"
+	Highlight.FillColor = PURPLE
+	Highlight.OutlineColor = LIGHT
+	Highlight.FillTransparency = 0.72
+	Highlight.OutlineTransparency = 0.05
+	Highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+	Highlight.Adornee = character
+	Highlight.Parent = character
+
+	HIGHLIGHTS[player] = Highlight
+end
+
+local function RemoveHighlight(player)
+	local Highlight = HIGHLIGHTS[player]
+
+	if Highlight then
+		Highlight:Destroy()
+		HIGHLIGHTS[player] = nil
+	end
+end
+
+local function SetESP(enabled)
+	ESP_ENABLED = enabled
+
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player ~= LocalPlayer then
+			if enabled then
+				AddHighlight(player)
+			else
+				RemoveHighlight(player)
+			end
+		end
+	end
+end
+
+Players.PlayerAdded:Connect(function(player)
+	player.CharacterAdded:Connect(function()
+		task.wait(0.5)
+
+		if ESP_ENABLED then
+			AddHighlight(player)
+		end
+	end)
+end)
+
+Players.PlayerRemoving:Connect(function(player)
+	RemoveHighlight(player)
+end)
+
+--==================================================
+-- BUTTONS
+--==================================================
+
+local ESPButton = CreateButton("ESP / Player Highlight : OFF")
+
+ESPButton.MouseButton1Click:Connect(function()
+	SetESP(not ESP_ENABLED)
+
+	if ESP_ENABLED then
+		ESPButton.Text = "ESP / Player Highlight : ON"
+		ESPButton.TextColor3 = GREEN
+	else
+		ESPButton.Text = "ESP / Player Highlight : OFF"
+		ESPButton.TextColor3 = LIGHT
+	end
+end)
+
+local RespawnButton = CreateButton("Respawn Character")
+
+RespawnButton.MouseButton1Click:Connect(function()
+	local Character = LocalPlayer.Character
+	local Humanoid = Character and Character:FindFirstChildOfClass("Humanoid")
+
+	if Humanoid then
+		Humanoid.Health = 0
+	end
+end)
+
+local ResetCameraButton = CreateButton("Reset Camera")
+
+ResetCameraButton.MouseButton1Click:Connect(function()
+	local Character = LocalPlayer.Character
+	local Humanoid = Character and Character:FindFirstChildOfClass("Humanoid")
+
+	if Humanoid then
+		workspace.CurrentCamera.CameraSubject = Humanoid
+	end
+end)
+
+local HideNamesButton = CreateButton("Hide / Show Panel")
+
+HideNamesButton.MouseButton1Click:Connect(function()
+	PANEL_VISIBLE = not PANEL_VISIBLE
+	Main.Visible = PANEL_VISIBLE
+end)
+
+local FullBrightButton = CreateButton("Debug Lighting")
+
+FullBrightButton.MouseButton1Click:Connect(function()
+	local Lighting = game:GetService("Lighting")
+
+	if Lighting.Brightness < 3 then
+		Lighting.Brightness = 3
+		Lighting.ClockTime = 14
+	else
+		Lighting.Brightness = 1
+	end
+end)
+
+local RejoinButton = CreateButton("Rejoin Server")
+
+RejoinButton.MouseButton1Click:Connect(function()
+	local TeleportService = game:GetService("TeleportService")
+	TeleportService:Teleport(game.PlaceId, LocalPlayer)
+end)
+
+local InfoButton = CreateButton("Player Info")
+
+InfoButton.MouseButton1Click:Connect(function()
+	print("Player:", LocalPlayer.Name)
+	print("UserId:", LocalPlayer.UserId)
+	print("PlaceId:", game.PlaceId)
+	print("JobId:", game.JobId)
+end)
+
+local ClearESPButton = CreateButton("Clear Highlights")
+
+ClearESPButton.MouseButton1Click:Connect(function()
+	SetESP(false)
+	ESPButton.Text = "ESP / Player Highlight : OFF"
+	ESPButton.TextColor3 = LIGHT
+end)
+
+--==================================================
+-- CLOSE / OPEN
+--==================================================
+
+CloseButton.MouseButton1Click:Connect(function()
+	Main.Visible = false
+	PANEL_VISIBLE = false
+end)
+
+UserInputService.InputBegan:Connect(function(input, processed)
+	if processed then
+		return
+	end
+
+	if input.KeyCode == Enum.KeyCode.RightShift then
+		PANEL_VISIBLE = not PANEL_VISIBLE
+		Main.Visible = PANEL_VISIBLE
+	end
+end)
+
+--==================================================
+-- DRAGGING
+--==================================================
+
+local dragging = false
+local dragStart
+local startPos
+
+TopBar.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1
+		or input.UserInputType == Enum.UserInputType.Touch then
+
+		dragging = true
+		dragStart = input.Position
+		startPos = Main.Position
+
+		input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then
+				dragging = false
+			end
+		end)
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if not dragging then
+		return
+	end
+
+	if input.UserInputType == Enum.UserInputType.MouseMovement
+		or input.UserInputType == Enum.UserInputType.Touch then
+
+		local delta = input.Position - dragStart
+
+		Main.Position = UDim2.new(
+			startPos.X.Scale,
+			startPos.X.Offset + delta.X,
+			startPos.Y.Scale,
+			startPos.Y.Offset + delta.Y
+		)
+	end
+end)
