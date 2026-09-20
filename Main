@@ -1,301 +1,823 @@
---// Дополнительные безопасные Admin/Debug функции
---// Добавь этот блок ПОСЛЕ создания Content/Grid
+--!nonstrict
+--[[
+	ADMIN PANEL · client
+	---------------------------------------------------------------
+	Place this LocalScript in:  StarterPlayer > StarterPlayerScripts
+	Partner script: "AdminServer" (Script) in ServerScriptService
 
-local CollectionService = game:GetService("CollectionService")
+	The panel is only built if the server confirms you're on the
+	admin list, so it does nothing in any place that doesn't have
+	the server half installed.
 
-local TARGET_LOCK = false
-local DEBUG_AURA = false
-local SPECTATING = false
-local SPECTATE_INDEX = 1
+	Open / close:  Right Ctrl, or the floating button.
+]]
 
-local function GetTrainingTargets()
-	local targets = {}
+local Players           = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService  = game:GetService("UserInputService")
+local RunService        = game:GetService("RunService")
+local TweenService      = game:GetService("TweenService")
 
-	for _, obj in ipairs(CollectionService:GetTagged("TrainingDummy")) do
-		if obj:IsA("Model") then
-			local humanoid = obj:FindFirstChildOfClass("Humanoid")
-			local root = obj:FindFirstChild("HumanoidRootPart")
+local LP     = Players.LocalPlayer
+local camera = workspace.CurrentCamera
 
-			if humanoid and root and humanoid.Health > 0 then
-				table.insert(targets, obj)
-			end
-		end
+local remote = ReplicatedStorage:WaitForChild("AdminRemote", 20)
+local check  = ReplicatedStorage:WaitForChild("AdminCheck", 20)
+if not (remote and check) then return end
+
+--=================== THEME ===================
+local T = {
+	void     = Color3.fromRGB(9, 7, 13),
+	panel    = Color3.fromRGB(17, 13, 25),
+	raised   = Color3.fromRGB(27, 21, 40),
+	line     = Color3.fromRGB(64, 38, 108),
+	violet   = Color3.fromRGB(154, 78, 255),
+	deep     = Color3.fromRGB(92, 41, 163),
+	text     = Color3.fromRGB(236, 230, 246),
+	dim      = Color3.fromRGB(146, 134, 170),
+	danger   = Color3.fromRGB(246, 88, 116),
+}
+
+local function new(class, props, kids)
+	local o = Instance.new(class)
+	local parent
+	for k, v in pairs(props or {}) do
+		if k == "Parent" then parent = v else o[k] = v end
 	end
-
-	return targets
+	for _, kid in ipairs(kids or {}) do kid.Parent = o end
+	o.Parent = parent
+	return o
 end
 
---==================================================
--- TARGET LOCK (ТОЛЬКО TrainingDummy)
---==================================================
-
-local TargetLockButton = CreateButton("Target Lock : OFF")
-
-TargetLockButton.MouseButton1Click:Connect(function()
-	TARGET_LOCK = not TARGET_LOCK
-
-	if TARGET_LOCK then
-		TargetLockButton.Text = "Target Lock : ON"
-		TargetLockButton.TextColor3 = GREEN
-	else
-		TargetLockButton.Text = "Target Lock : OFF"
-		TargetLockButton.TextColor3 = LIGHT
-	end
-end)
-
-RunService.RenderStepped:Connect(function()
-	if not TARGET_LOCK then
-		return
-	end
-
-	local Camera = workspace.CurrentCamera
-	local targets = GetTrainingTargets()
-
-	local closest
-	local closestDistance = math.huge
-
-	for _, target in ipairs(targets) do
-		local root = target:FindFirstChild("HumanoidRootPart")
-
-		if root then
-			local screenPos, visible =
-				Camera:WorldToViewportPoint(root.Position)
-
-			if visible then
-				local center = Vector2.new(
-					Camera.ViewportSize.X / 2,
-					Camera.ViewportSize.Y / 2
-				)
-
-				local distance = (
-					Vector2.new(screenPos.X, screenPos.Y) - center
-				).Magnitude
-
-				if distance < closestDistance then
-					closestDistance = distance
-					closest = root
-				end
-			end
-		end
-	end
-
-	-- Только визуальная фиксация камеры,
-	-- без атаки игроков и без изменения их здоровья.
-	if closest then
-		local cameraPosition = Camera.CFrame.Position
-		Camera.CFrame = CFrame.lookAt(
-			cameraPosition,
-			closest.Position
-		)
-	end
-end)
-
---==================================================
--- DEBUG AURA
--- Только подсветка TrainingDummy
---==================================================
-
-local AuraButton = CreateButton("Training Aura : OFF")
-
-AuraButton.MouseButton1Click:Connect(function()
-	DEBUG_AURA = not DEBUG_AURA
-
-	AuraButton.Text =
-		DEBUG_AURA
-		and "Training Aura : ON"
-		or "Training Aura : OFF"
-
-	AuraButton.TextColor3 =
-		DEBUG_AURA and GREEN or LIGHT
-
-	if not DEBUG_AURA then
-		for _, obj in ipairs(CollectionService:GetTagged("TrainingDummy")) do
-			local highlight = obj:FindFirstChild("TrainingAuraHighlight")
-
-			if highlight then
-				highlight:Destroy()
-			end
-		end
-	end
-end)
-
-RunService.Heartbeat:Connect(function()
-	if not DEBUG_AURA then
-		return
-	end
-
-	local character = LocalPlayer.Character
-	local root = character and character:FindFirstChild("HumanoidRootPart")
-
-	if not root then
-		return
-	end
-
-	for _, dummy in ipairs(GetTrainingTargets()) do
-		local dummyRoot = dummy:FindFirstChild("HumanoidRootPart")
-
-		if dummyRoot then
-			local distance = (dummyRoot.Position - root.Position).Magnitude
-
-			local highlight =
-				dummy:FindFirstChild("TrainingAuraHighlight")
-
-			if distance <= 20 then
-				if not highlight then
-					highlight = Instance.new("Highlight")
-					highlight.Name = "TrainingAuraHighlight"
-					highlight.FillColor = PURPLE
-					highlight.OutlineColor = LIGHT
-					highlight.FillTransparency = 0.5
-					highlight.DepthMode =
-						Enum.HighlightDepthMode.AlwaysOnTop
-					highlight.Parent = dummy
-				end
-			elseif highlight then
-				highlight:Destroy()
-			end
-		end
-	end
-end)
-
---==================================================
--- SPECTATE
---==================================================
-
-local SpectateButton = CreateButton("Spectate Players")
-
-local function GetOtherPlayers()
-	local result = {}
-
-	for _, player in ipairs(Players:GetPlayers()) do
-		if player ~= LocalPlayer then
-			table.insert(result, player)
-		end
-	end
-
-	return result
+local function round(o, r)
+	new("UICorner", { CornerRadius = UDim.new(0, r or 8), Parent = o })
+	return o
 end
 
-local function SpectateNext()
-	local list = GetOtherPlayers()
-
-	if #list == 0 then
-		return
-	end
-
-	if SPECTATE_INDEX > #list then
-		SPECTATE_INDEX = 1
-	end
-
-	local target = list[SPECTATE_INDEX]
-	local character = target.Character
-	local humanoid = character and
-		character:FindFirstChildOfClass("Humanoid")
-
-	if humanoid then
-		workspace.CurrentCamera.CameraSubject = humanoid
-		SPECTATING = true
-	end
-
-	SPECTATE_INDEX += 1
-
-	if SPECTATE_INDEX > #list then
-		SPECTATE_INDEX = 1
-	end
+local function outline(o, color, thickness)
+	new("UIStroke", { Color = color or T.line, Thickness = thickness or 1, Parent = o })
+	return o
 end
 
-SpectateButton.MouseButton1Click:Connect(SpectateNext)
+local gui = new("ScreenGui", {
+	Name = "AdminPanel",
+	ResetOnSpawn = false,
+	IgnoreGuiInset = true,
+	ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+	Parent = LP:WaitForChild("PlayerGui"),
+})
 
---==================================================
--- STOP SPECTATE
---==================================================
+--=================== BANNERS (everyone sees these) ===================
+local function banner(text, from)
+	local holder = new("Frame", {
+		Size = UDim2.new(0, 420, 0, 54),
+		Position = UDim2.new(0.5, 0, 0, -70),
+		AnchorPoint = Vector2.new(0.5, 0),
+		BackgroundColor3 = T.panel,
+		BorderSizePixel = 0,
+		Parent = gui,
+	})
+	round(holder, 10)
+	outline(holder, T.violet, 1.5)
 
-local StopSpectateButton = CreateButton("Stop Spectating")
+	new("Frame", {
+		Size = UDim2.new(0, 4, 1, -16),
+		Position = UDim2.new(0, 10, 0, 8),
+		BackgroundColor3 = T.violet,
+		BorderSizePixel = 0,
+		Parent = holder,
+	})
 
-StopSpectateButton.MouseButton1Click:Connect(function()
-	local character = LocalPlayer.Character
-	local humanoid = character and
-		character:FindFirstChildOfClass("Humanoid")
+	new("TextLabel", {
+		Size = UDim2.new(1, -34, 1, 0),
+		Position = UDim2.new(0, 24, 0, 0),
+		BackgroundTransparency = 1,
+		Text = text .. (from and ("   — " .. from) or ""),
+		TextColor3 = T.text,
+		TextSize = 15,
+		Font = Enum.Font.Gotham,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextWrapped = true,
+		Parent = holder,
+	})
 
-	if humanoid then
-		workspace.CurrentCamera.CameraSubject = humanoid
+	TweenService:Create(holder, TweenInfo.new(0.35, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+		Position = UDim2.new(0.5, 0, 0, 24),
+	}):Play()
+
+	task.delay(4.5, function()
+		local out = TweenService:Create(holder, TweenInfo.new(0.3), { Position = UDim2.new(0.5, 0, 0, -70) })
+		out:Play()
+		out.Completed:Wait()
+		holder:Destroy()
+	end)
+end
+
+local toggleStates = {}
+
+remote.OnClientEvent:Connect(function(action, a, b)
+	if action == "Announce" then
+		banner(a, b)
+	elseif action == "Notice" then
+		banner(a)
+	elseif action == "State" and toggleStates[a] then
+		toggleStates[a](b)
+	end
+end)
+
+--=================== ADMIN GATE ===================
+local ok, allowed = pcall(function() return check:InvokeServer() end)
+if not (ok and allowed) then return end
+
+--=================== WINDOW ===================
+local W, H = 560, 392
+
+local root = new("Frame", {
+	Name = "Window",
+	Size = UDim2.new(0, W, 0, H),
+	Position = UDim2.new(0.5, -W / 2, 0.5, -H / 2),
+	BackgroundColor3 = T.void,
+	BorderSizePixel = 0,
+	Visible = false,
+	Parent = gui,
+})
+round(root, 12)
+outline(root, T.line, 1.5)
+
+local header = new("Frame", {
+	Size = UDim2.new(1, 0, 0, 46),
+	BackgroundColor3 = T.panel,
+	BorderSizePixel = 0,
+	Parent = root,
+})
+round(header, 12)
+new("Frame", { -- square off the bottom corners of the header
+	Size = UDim2.new(1, 0, 0, 14),
+	Position = UDim2.new(0, 0, 1, -14),
+	BackgroundColor3 = T.panel,
+	BorderSizePixel = 0,
+	Parent = header,
+})
+new("UIGradient", {
+	Color = ColorSequence.new(T.deep, T.panel),
+	Rotation = 12,
+	Parent = header,
+})
+
+new("TextLabel", {
+	Size = UDim2.new(0.6, 0, 0, 20),
+	Position = UDim2.new(0, 18, 0, 8),
+	BackgroundTransparency = 1,
+	Text = "Admin panel",
+	TextColor3 = T.text,
+	TextSize = 17,
+	Font = Enum.Font.GothamBold,
+	TextXAlignment = Enum.TextXAlignment.Left,
+	Parent = header,
+})
+
+local subtitle = new("TextLabel", {
+	Size = UDim2.new(0.6, 0, 0, 14),
+	Position = UDim2.new(0, 18, 0, 26),
+	BackgroundTransparency = 1,
+	Text = "Acting on yourself",
+	TextColor3 = T.dim,
+	TextSize = 12,
+	Font = Enum.Font.Gotham,
+	TextXAlignment = Enum.TextXAlignment.Left,
+	Parent = header,
+})
+
+local closeBtn = new("TextButton", {
+	Size = UDim2.new(0, 28, 0, 28),
+	Position = UDim2.new(1, -38, 0, 9),
+	BackgroundColor3 = T.raised,
+	Text = "×",
+	TextColor3 = T.dim,
+	TextSize = 20,
+	Font = Enum.Font.GothamBold,
+	AutoButtonColor = false,
+	Parent = header,
+})
+round(closeBtn, 6)
+
+-- drag the window by its header
+do
+	local dragging, startPos, startMouse = false, nil, nil
+	header.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1
+			or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			startPos = root.Position
+			startMouse = input.Position
+		end
+	end)
+	UserInputService.InputChanged:Connect(function(input)
+		if not dragging then return end
+		if input.UserInputType == Enum.UserInputType.MouseMovement
+			or input.UserInputType == Enum.UserInputType.Touch then
+			local d = input.Position - startMouse
+			root.Position = UDim2.new(
+				startPos.X.Scale, startPos.X.Offset + d.X,
+				startPos.Y.Scale, startPos.Y.Offset + d.Y
+			)
+		end
+	end)
+	UserInputService.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1
+			or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = false
+		end
+	end)
+end
+
+local sidebar = new("Frame", {
+	Size = UDim2.new(0, 132, 1, -46),
+	Position = UDim2.new(0, 0, 0, 46),
+	BackgroundColor3 = T.panel,
+	BorderSizePixel = 0,
+	Parent = root,
+})
+new("UIListLayout", { Padding = UDim.new(0, 4), Parent = sidebar })
+new("UIPadding", { PaddingTop = UDim.new(0, 10), PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8), Parent = sidebar })
+
+local content = new("Frame", {
+	Size = UDim2.new(1, -132, 1, -46),
+	Position = UDim2.new(0, 132, 0, 46),
+	BackgroundTransparency = 1,
+	Parent = root,
+})
+
+--=================== WIDGETS ===================
+local pages, tabs = {}, {}
+local currentPage
+
+local function showPage(name)
+	for n, page in pairs(pages) do page.Visible = (n == name) end
+	for n, tab in pairs(tabs) do
+		tab.BackgroundColor3 = (n == name) and T.raised or T.panel
+		tab.TextColor3 = (n == name) and T.text or T.dim
+		tab:FindFirstChild("Marker").BackgroundTransparency = (n == name) and 0 or 1
+	end
+	currentPage = name
+end
+
+local function makePage(name)
+	local page = new("ScrollingFrame", {
+		Size = UDim2.new(1, 0, 1, 0),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ScrollBarThickness = 3,
+		ScrollBarImageColor3 = T.deep,
+		CanvasSize = UDim2.new(0, 0, 0, 0),
+		AutomaticCanvasSize = Enum.AutomaticSize.Y,
+		Visible = false,
+		Parent = content,
+	})
+	new("UIListLayout", { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder, Parent = page })
+	new("UIPadding", {
+		PaddingTop = UDim.new(0, 12), PaddingBottom = UDim.new(0, 12),
+		PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 14),
+		Parent = page,
+	})
+
+	local tab = new("TextButton", {
+		Size = UDim2.new(1, 0, 0, 32),
+		BackgroundColor3 = T.panel,
+		Text = "    " .. name,
+		TextColor3 = T.dim,
+		TextSize = 14,
+		Font = Enum.Font.GothamMedium,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		AutoButtonColor = false,
+		Parent = sidebar,
+	})
+	round(tab, 6)
+	new("Frame", {
+		Name = "Marker",
+		Size = UDim2.new(0, 3, 0, 14),
+		Position = UDim2.new(0, 6, 0.5, -7),
+		BackgroundColor3 = T.violet,
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		Parent = tab,
+	})
+	tab.MouseButton1Click:Connect(function() showPage(name) end)
+
+	pages[name] = page
+	tabs[name] = tab
+	return page
+end
+
+local function caption(parent, text)
+	return new("TextLabel", {
+		Size = UDim2.new(1, 0, 0, 16),
+		BackgroundTransparency = 1,
+		Text = text,
+		TextColor3 = T.dim,
+		TextSize = 12,
+		Font = Enum.Font.GothamMedium,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		Parent = parent,
+	})
+end
+
+local function button(parent, text, callback, danger)
+	local b = new("TextButton", {
+		Size = UDim2.new(1, 0, 0, 34),
+		BackgroundColor3 = T.raised,
+		Text = text,
+		TextColor3 = danger and T.danger or T.text,
+		TextSize = 14,
+		Font = Enum.Font.GothamMedium,
+		AutoButtonColor = false,
+		Parent = parent,
+	})
+	round(b, 7)
+	outline(b, danger and T.danger or T.line, 1)
+	b.MouseEnter:Connect(function()
+		TweenService:Create(b, TweenInfo.new(0.15), { BackgroundColor3 = danger and Color3.fromRGB(52, 20, 32) or T.deep }):Play()
+	end)
+	b.MouseLeave:Connect(function()
+		TweenService:Create(b, TweenInfo.new(0.15), { BackgroundColor3 = T.raised }):Play()
+	end)
+	b.MouseButton1Click:Connect(callback)
+	return b
+end
+
+local function toggle(parent, text, callback, stateKey)
+	local on = false
+	local b = new("TextButton", {
+		Size = UDim2.new(1, 0, 0, 34),
+		BackgroundColor3 = T.raised,
+		Text = "",
+		AutoButtonColor = false,
+		Parent = parent,
+	})
+	round(b, 7)
+	outline(b, T.line, 1)
+
+	new("TextLabel", {
+		Size = UDim2.new(1, -70, 1, 0),
+		Position = UDim2.new(0, 12, 0, 0),
+		BackgroundTransparency = 1,
+		Text = text,
+		TextColor3 = T.text,
+		TextSize = 14,
+		Font = Enum.Font.GothamMedium,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		Parent = b,
+	})
+
+	local track = new("Frame", {
+		Size = UDim2.new(0, 40, 0, 20),
+		Position = UDim2.new(1, -52, 0.5, -10),
+		BackgroundColor3 = T.void,
+		BorderSizePixel = 0,
+		Parent = b,
+	})
+	round(track, 10)
+	local knob = new("Frame", {
+		Size = UDim2.new(0, 14, 0, 14),
+		Position = UDim2.new(0, 3, 0.5, -7),
+		BackgroundColor3 = T.dim,
+		BorderSizePixel = 0,
+		Parent = track,
+	})
+	round(knob, 7)
+
+	local function apply(value)
+		on = value
+		TweenService:Create(knob, TweenInfo.new(0.18, Enum.EasingStyle.Quad), {
+			Position = on and UDim2.new(1, -17, 0.5, -7) or UDim2.new(0, 3, 0.5, -7),
+			BackgroundColor3 = on and T.text or T.dim,
+		}):Play()
+		TweenService:Create(track, TweenInfo.new(0.18), {
+			BackgroundColor3 = on and T.violet or T.void,
+		}):Play()
 	end
 
-	SPECTATING = false
-end)
+	b.MouseButton1Click:Connect(function()
+		apply(not on)
+		callback(on)
+	end)
 
---==================================================
--- FOV VISUALIZER
---==================================================
+	if stateKey then
+		toggleStates[stateKey] = apply -- let the server correct us
+	end
+	return b
+end
 
-local FOV_ENABLED = false
-local FOV_RADIUS = 150
+local function slider(parent, label, min, max, default, callback)
+	local holder = new("Frame", {
+		Size = UDim2.new(1, 0, 0, 56),
+		BackgroundColor3 = T.raised,
+		BorderSizePixel = 0,
+		Parent = parent,
+	})
+	round(holder, 7)
+	outline(holder, T.line, 1)
 
-local FOVButton = CreateButton("FOV Circle : OFF")
+	new("TextLabel", {
+		Size = UDim2.new(1, -70, 0, 20),
+		Position = UDim2.new(0, 12, 0, 8),
+		BackgroundTransparency = 1,
+		Text = label,
+		TextColor3 = T.text,
+		TextSize = 14,
+		Font = Enum.Font.GothamMedium,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		Parent = holder,
+	})
 
-local FOVCircle = Instance.new("Frame")
-FOVCircle.Name = "FOVCircle"
-FOVCircle.Size = UDim2.fromOffset(
-	FOV_RADIUS * 2,
-	FOV_RADIUS * 2
-)
-FOVCircle.AnchorPoint = Vector2.new(0.5, 0.5)
-FOVCircle.Position = UDim2.fromScale(0.5, 0.5)
-FOVCircle.BackgroundTransparency = 1
-FOVCircle.Visible = false
-FOVCircle.Parent = ScreenGui
+	local readout = new("TextLabel", {
+		Size = UDim2.new(0, 56, 0, 20),
+		Position = UDim2.new(1, -66, 0, 8),
+		BackgroundTransparency = 1,
+		Text = tostring(default),
+		TextColor3 = T.violet,
+		TextSize = 14,
+		Font = Enum.Font.GothamBold,
+		TextXAlignment = Enum.TextXAlignment.Right,
+		Parent = holder,
+	})
 
-local FOVCorner = Instance.new("UICorner")
-FOVCorner.CornerRadius = UDim.new(1, 0)
-FOVCorner.Parent = FOVCircle
+	local track = new("Frame", {
+		Size = UDim2.new(1, -24, 0, 6),
+		Position = UDim2.new(0, 12, 0, 38),
+		BackgroundColor3 = T.void,
+		BorderSizePixel = 0,
+		Parent = holder,
+	})
+	round(track, 3)
 
-local FOVStroke = Instance.new("UIStroke")
-FOVStroke.Color = PURPLE
-FOVStroke.Thickness = 2
-FOVStroke.Transparency = 0.15
-FOVStroke.Parent = FOVCircle
+	local alpha = (default - min) / (max - min)
+	local fill = new("Frame", {
+		Size = UDim2.new(alpha, 0, 1, 0),
+		BackgroundColor3 = T.violet,
+		BorderSizePixel = 0,
+		Parent = track,
+	})
+	round(fill, 3)
 
-FOVButton.MouseButton1Click:Connect(function()
-	FOV_ENABLED = not FOV_ENABLED
-	FOVCircle.Visible = FOV_ENABLED
+	local knob = new("Frame", {
+		Size = UDim2.new(0, 14, 0, 14),
+		Position = UDim2.new(alpha, -7, 0.5, -7),
+		BackgroundColor3 = T.text,
+		BorderSizePixel = 0,
+		ZIndex = 2,
+		Parent = track,
+	})
+	round(knob, 7)
 
-	FOVButton.Text =
-		FOV_ENABLED
-		and "FOV Circle : ON"
-		or "FOV Circle : OFF"
+	-- The server rate-limits commands, so send while dragging at a slower
+	-- cadence and always send the settled value once the drag ends.
+	local dragging, lastValue, lastSent = false, default, 0
 
-	FOVButton.TextColor3 =
-		FOV_ENABLED and GREEN or LIGHT
-end)
-
---==================================================
--- PLAYER COUNT
---==================================================
-
-local PlayerCountButton = CreateButton("Refresh Player Count")
-
-PlayerCountButton.MouseButton1Click:Connect(function()
-	PlayerCountButton.Text =
-		"Players Online: " .. tostring(#Players:GetPlayers())
-
-	task.delay(2, function()
-		if PlayerCountButton.Parent then
-			PlayerCountButton.Text = "Refresh Player Count"
+	local function setFromX(x)
+		local size = track.AbsoluteSize.X
+		if size <= 0 then return end
+		local a = math.clamp((x - track.AbsolutePosition.X) / size, 0, 1)
+		local value = math.floor(min + (max - min) * a + 0.5)
+		fill.Size = UDim2.new(a, 0, 1, 0)
+		knob.Position = UDim2.new(a, -7, 0.5, -7)
+		readout.Text = tostring(value)
+		lastValue = value
+		if os.clock() - lastSent >= 0.1 then
+			lastSent = os.clock()
+			callback(value)
 		end
+	end
+
+	track.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1
+			or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			setFromX(input.Position.X)
+		end
+	end)
+	UserInputService.InputChanged:Connect(function(input)
+		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
+			or input.UserInputType == Enum.UserInputType.Touch) then
+			setFromX(input.Position.X)
+		end
+	end)
+	UserInputService.InputEnded:Connect(function(input)
+		if dragging and (input.UserInputType == Enum.UserInputType.MouseButton1
+			or input.UserInputType == Enum.UserInputType.Touch) then
+			dragging = false
+			task.delay(0.12, function() callback(lastValue) end)
+		end
+	end)
+
+	return holder
+end
+
+local function textField(parent, placeholder)
+	local box = new("TextBox", {
+		Size = UDim2.new(1, 0, 0, 34),
+		BackgroundColor3 = T.void,
+		Text = "",
+		PlaceholderText = placeholder,
+		PlaceholderColor3 = T.dim,
+		TextColor3 = T.text,
+		TextSize = 14,
+		Font = Enum.Font.Gotham,
+		ClearTextOnFocus = false,
+		Parent = parent,
+	})
+	round(box, 7)
+	outline(box, T.line, 1)
+	new("UIPadding", { PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10), Parent = box })
+	return box
+end
+
+--=================== TARGET SELECTION ===================
+local target = nil -- nil means "me"
+local playerLists = {}
+
+local function targetName()
+	return target and target.Name or LP.Name .. " (you)"
+end
+
+local function setTarget(plr)
+	target = (plr == LP) and nil or plr
+	subtitle.Text = "Acting on " .. targetName()
+	for _, refresh in ipairs(playerLists) do refresh() end
+end
+
+local function makePlayerList(parent, height)
+	local list = new("ScrollingFrame", {
+		Size = UDim2.new(1, 0, 0, height or 150),
+		BackgroundColor3 = T.void,
+		BorderSizePixel = 0,
+		ScrollBarThickness = 3,
+		ScrollBarImageColor3 = T.deep,
+		CanvasSize = UDim2.new(0, 0, 0, 0),
+		AutomaticCanvasSize = Enum.AutomaticSize.Y,
+		Parent = parent,
+	})
+	round(list, 7)
+	outline(list, T.line, 1)
+	new("UIListLayout", { Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.Name, Parent = list })
+	new("UIPadding", { PaddingTop = UDim.new(0, 6), PaddingBottom = UDim.new(0, 6), PaddingLeft = UDim.new(0, 6), PaddingRight = UDim.new(0, 6), Parent = list })
+
+	local function refresh()
+		for _, child in ipairs(list:GetChildren()) do
+			if child:IsA("TextButton") then child:Destroy() end
+		end
+		for _, plr in ipairs(Players:GetPlayers()) do
+			local selected = (plr == LP and target == nil) or (plr == target)
+			local row = new("TextButton", {
+				Name = plr.Name,
+				Size = UDim2.new(1, 0, 0, 28),
+				BackgroundColor3 = selected and T.deep or T.raised,
+				Text = "  " .. plr.DisplayName .. (plr == LP and "  ·  you" or ""),
+				TextColor3 = selected and T.text or T.dim,
+				TextSize = 13,
+				Font = Enum.Font.GothamMedium,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				AutoButtonColor = false,
+				Parent = list,
+			})
+			round(row, 5)
+			row.MouseButton1Click:Connect(function() setTarget(plr) end)
+		end
+	end
+
+	table.insert(playerLists, refresh)
+	refresh()
+	return list
+end
+
+Players.PlayerAdded:Connect(function()
+	for _, refresh in ipairs(playerLists) do refresh() end
+end)
+Players.PlayerRemoving:Connect(function(plr)
+	if plr == target then target = nil end
+	task.defer(function()
+		subtitle.Text = "Acting on " .. targetName()
+		for _, refresh in ipairs(playerLists) do refresh() end
 	end)
 end)
 
---==================================================
--- SERVER DEBUG INFO
---==================================================
+local function send(action, ...)
+	remote:FireServer(action, target, ...)
+end
 
-local ServerInfoButton = CreateButton("Server Debug Info")
+--=================== PAGE: CHARACTER ===================
+do
+	local page = makePage("Character")
 
-ServerInfoButton.MouseButton1Click:Connect(function()
-	print("========== SERVER DEBUG ==========")
-	print("PlaceId:", game.PlaceId)
-	print("JobId:", game.JobId)
-	print("Players:", #Players:GetPlayers())
-	print("Client:", LocalPlayer.Name)
-	print("==================================")
+	caption(page, "Movement")
+	slider(page, "Walk speed", 0, 300, 16, function(v) send("SetSpeed", v) end)
+	slider(page, "Jump power", 0, 500, 50, function(v) send("SetJump", v) end)
+
+	caption(page, "Health")
+	button(page, "Heal to full", function() send("Heal") end)
+	toggle(page, "God mode", function() send("ToggleGod") end, "God")
+	button(page, "Respawn", function() send("Respawn") end)
+
+	caption(page, "Local helpers")
+
+	local flying, flySpeed, flyConn = false, 70, nil
+	toggle(page, "Fly", function(on)
+		flying = on
+		local char = LP.Character
+		local hum = char and char:FindFirstChildOfClass("Humanoid")
+		if not hum then return end
+		hum.PlatformStand = on
+		if on then
+			flyConn = RunService.RenderStepped:Connect(function(dt)
+				local c = LP.Character
+				local rootPart = c and c:FindFirstChild("HumanoidRootPart")
+				if not (flying and rootPart) then return end
+				local cf = camera.CFrame
+				local dir = Vector3.zero
+				if UserInputService:IsKeyDown(Enum.KeyCode.W) then dir += cf.LookVector end
+				if UserInputService:IsKeyDown(Enum.KeyCode.S) then dir -= cf.LookVector end
+				if UserInputService:IsKeyDown(Enum.KeyCode.A) then dir -= cf.RightVector end
+				if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir += cf.RightVector end
+				if UserInputService:IsKeyDown(Enum.KeyCode.Space) then dir += Vector3.yAxis end
+				if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then dir -= Vector3.yAxis end
+				rootPart.AssemblyLinearVelocity = Vector3.zero
+				if dir.Magnitude > 0 then
+					rootPart.CFrame = rootPart.CFrame + dir.Unit * flySpeed * dt
+				end
+			end)
+		elseif flyConn then
+			flyConn:Disconnect()
+			flyConn = nil
+		end
+	end)
+	slider(page, "Fly speed", 10, 300, 70, function(v) flySpeed = v end)
+
+	local noclip = false
+	toggle(page, "Walk through walls", function(on) noclip = on end)
+	RunService.Stepped:Connect(function()
+		if not noclip then return end
+		local char = LP.Character
+		if not char then return end
+		for _, part in ipairs(char:GetDescendants()) do
+			if part:IsA("BasePart") and part.CanCollide then part.CanCollide = false end
+		end
+	end)
+
+	local infiniteJump = false
+	toggle(page, "Infinite jump", function(on) infiniteJump = on end)
+	UserInputService.JumpRequest:Connect(function()
+		if not infiniteJump then return end
+		local hum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
+		if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
+	end)
+end
+
+--=================== PAGE: TELEPORT ===================
+do
+	local page = makePage("Teleport")
+
+	caption(page, "Pick a player")
+	makePlayerList(page, 132)
+
+	button(page, "Go to them", function() send("TeleportTo") end)
+	button(page, "Bring them here", function() send("Bring") end)
+	button(page, "Back to spawn", function() send("ToSpawn") end)
+
+	caption(page, "Coordinates")
+	local row = new("Frame", { Size = UDim2.new(1, 0, 0, 34), BackgroundTransparency = 1, Parent = page })
+	new("UIListLayout", {
+		FillDirection = Enum.FillDirection.Horizontal,
+		Padding = UDim.new(0, 6),
+		Parent = row,
+	})
+	local fields = {}
+	for _, axis in ipairs({ "X", "Y", "Z" }) do
+		local box = textField(row, axis)
+		box.Size = UDim2.new(0.333, -4, 1, 0)
+		fields[axis] = box
+	end
+	button(page, "Teleport to coordinates", function()
+		send("TeleportXYZ",
+			tonumber(fields.X.Text) or 0,
+			tonumber(fields.Y.Text) or 50,
+			tonumber(fields.Z.Text) or 0)
+	end)
+
+	button(page, "Copy my position", function()
+		local rootPart = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+		if not rootPart then return end
+		local p = rootPart.Position
+		fields.X.Text = string.format("%.1f", p.X)
+		fields.Y.Text = string.format("%.1f", p.Y)
+		fields.Z.Text = string.format("%.1f", p.Z)
+	end)
+end
+
+--=================== PAGE: MODERATION ===================
+do
+	local page = makePage("Moderation")
+
+	caption(page, "Pick a player")
+	makePlayerList(page, 132)
+
+	button(page, "Freeze / unfreeze", function() send("Freeze") end)
+	button(page, "Respawn them", function() send("Respawn") end)
+
+	caption(page, "Remove from server")
+	local reason = textField(page, "Reason shown to the player")
+	button(page, "Kick", function()
+		if not target then
+			banner("Pick someone other than yourself first")
+			return
+		end
+		send("Kick", reason.Text)
+		reason.Text = ""
+	end, true)
+end
+
+--=================== PAGE: SERVER ===================
+do
+	local page = makePage("Server")
+
+	caption(page, "Message everyone")
+	local msg = textField(page, "Type an announcement")
+	button(page, "Send announcement", function()
+		if #msg.Text == 0 then return end
+		send("Announce", msg.Text)
+		msg.Text = ""
+	end)
+
+	caption(page, "Everyone at once")
+	button(page, "Heal all players", function() send("HealAll") end)
+	button(page, "Respawn all players", function() send("RespawnAll") end)
+
+	caption(page, "World")
+	slider(page, "Time of day", 0, 24, 14, function(v) send("SetTime", v) end)
+	slider(page, "Gravity", 0, 500, 196, function(v) send("SetGravity", v) end)
+
+	caption(page, "This server")
+	local info = new("TextLabel", {
+		Size = UDim2.new(1, 0, 0, 48),
+		BackgroundColor3 = T.raised,
+		Text = "",
+		TextColor3 = T.dim,
+		TextSize = 13,
+		Font = Enum.Font.Gotham,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		Parent = page,
+	})
+	round(info, 7)
+	outline(info, T.line, 1)
+	new("UIPadding", { PaddingLeft = UDim.new(0, 12), Parent = info })
+
+	task.spawn(function()
+		while info.Parent do
+			info.Text = string.format(
+				"Players online: %d\nUptime: %d min",
+				#Players:GetPlayers(),
+				math.floor(workspace.DistributedGameTime / 60)
+			)
+			task.wait(2)
+		end
+	end)
+end
+
+showPage("Character")
+
+--=================== OPEN / CLOSE ===================
+local launcher = new("TextButton", {
+	Size = UDim2.new(0, 46, 0, 46),
+	Position = UDim2.new(0, 16, 0.5, -23),
+	BackgroundColor3 = T.panel,
+	Text = "◆",
+	TextColor3 = T.violet,
+	TextSize = 20,
+	Font = Enum.Font.GothamBold,
+	AutoButtonColor = false,
+	Parent = gui,
+})
+round(launcher, 12)
+outline(launcher, T.line, 1.5)
+
+local function setOpen(open)
+	root.Visible = open
+	launcher.BackgroundColor3 = open and T.deep or T.panel
+	if open then
+		root.Size = UDim2.new(0, W - 30, 0, H - 20)
+		TweenService:Create(root, TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+			Size = UDim2.new(0, W, 0, H),
+		}):Play()
+	end
+end
+
+launcher.MouseButton1Click:Connect(function() setOpen(not root.Visible) end)
+closeBtn.MouseButton1Click:Connect(function() setOpen(false) end)
+
+UserInputService.InputBegan:Connect(function(input, processed)
+	if processed then return end
+	if input.KeyCode == Enum.KeyCode.RightControl then
+		setOpen(not root.Visible)
+	end
 end)
+
+banner("Admin panel ready — Right Ctrl to open")
