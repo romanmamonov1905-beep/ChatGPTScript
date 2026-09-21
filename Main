@@ -537,3 +537,9 @@ if _G.SliderValues.CurrentJump > 50 then hum.UseJumpPower = true hum.JumpPower =
 _G.SliderValues.CurrentJump end
 end
 end)
+
+<FollowUp>
+Если всё запустилось успешно, сообщите:
+* Успевают ли ползунки реагировать на **резкие движения мыши**?
+* Хотите ли вы добавить **Keybind System (визуальное назначение любой клавиши)** на кнопки чита прямо из меню?
+</FollowUp>
