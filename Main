@@ -1,235 +1,422 @@
--- ПОЛНОСТЬЮ ЛОКАЛЬНЫЙ АДМИН-СКРИПТ (LocalScript в StarterPlayerScripts)
+--==================================================================================--
+--               DEXI SCRIPT — ЧАСТЬ 1: ГРАФИЧЕСКИЙ ИНТЕРФЕЙС (UI CORE)             --
+--==================================================================================--
+
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
 local LocalPlayer = Players.LocalPlayer
 
--- Ждем загрузки интерфейса игрока
-local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+_G.SliderValues = { CurrentSpeed = 16, CurrentJump = 50 }
+_G.States = {
+	Esp = false, Fly = false, Speed = false, Noclip = false, InfJump = false,
+	LowGravity = false, Aimbot = false, FullBright = false, ClickTeleport = false,
+	SuperJump = false, SpinBot = false, Bhop = false, WallHackVision = false, AutoClicker = false
+}
+_G.Events = {}
 
-----------------------------------------------------------------
--- 1. СОЗДАНИЕ ИНТЕРФЕЙСА (GUI)
-----------------------------------------------------------------
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "LocalAdminPanel"
+ScreenGui.Name = "DexiScript_Premium_Fixed"
 ScreenGui.ResetOnSpawn = false
-ScreenGui.Parent = PlayerGui
+ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 
--- Главный фрейм панели
 local MainFrame = Instance.new("Frame")
-MainFrame.Size = UUDim2.new(0, 250, 0, 300)
-MainFrame.Position = UDim2.new(0.05, 0, 0.2, 0)
-MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 360, 0, 480)
+MainFrame.Position = UDim2.new(0.5, -180, 0.5, -240)
+MainFrame.BackgroundColor3 = Color3.fromRGB(15, 12, 22)
 MainFrame.BorderSizePixel = 0
 MainFrame.Active = true
-MainFrame.Draggable = true -- Позволяет перетаскивать панель мышкой
 MainFrame.Parent = ScreenGui
 
--- Закругление углов панели
-local UICorner = Instance.new("UICorner")
-UICorner.CornerRadius = UDim.new(0, 10)
-UICorner.Parent = MainFrame
+local MainCorner = Instance.new("UICorner")
+MainCorner.CornerRadius = UDim.new(0, 12)
+MainCorner.Parent = MainFrame
 
--- Заголовок панели
+local MainStroke = Instance.new("UIStroke")
+MainStroke.Thickness = 2
+MainStroke.Color = Color3.fromRGB(140, 40, 255)
+MainStroke.Parent = MainFrame
+
+local Header = Instance.new("Frame")
+Header.Name = "Header"
+Header.Size = UDim2.new(1, 0, 0, 45)
+Header.BackgroundColor3 = Color3.fromRGB(25, 20, 35)
+Header.BorderSizePixel = 0
+Header.Parent = MainFrame
+
+local HeaderCorner = Instance.new("UICorner")
+HeaderCorner.CornerRadius = UDim.new(0, 12)
+HeaderCorner.Parent = Header
+
+local HeaderPatch = Instance.new("Frame")
+HeaderPatch.Size = UDim2.new(1, 0, 0, 10)
+HeaderPatch.Position = UDim2.new(0, 0, 1, -10)
+HeaderPatch.BackgroundColor3 = Color3.fromRGB(25, 20, 35)
+HeaderPatch.BorderSizePixel = 0
+HeaderPatch.Parent = Header
+
 local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, 0, 0, 40)
+Title.Size = UDim2.new(1, -20, 1, 0)
+Title.Position = UDim2.new(0, 15, 0, 0)
 Title.BackgroundTransparency = 1
-Title.Text = "LOCAL ADMIN PANEL"
-Title.TextColor3 = Color3.fromRGB(255, 255, 255)
-Title.Font = Enum.Font.SourceSansBold
+Title.Text = "DEXI SCRIPT"
+Title.TextColor3 = Color3.fromRGB(220, 180, 255)
+Title.Font = Enum.Font.GothamBold
 Title.TextSize = 18
-Title.Parent = MainFrame
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.Parent = Header
 
--- Список для кнопок (автоматическое выравнивание)
-local UIListLayout = Instance.new("UIListLayout")
-UIListLayout.Padding = UDim.new(0, 10)
-UIListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-UIListLayout.Parent = MainFrame
+local Container = Instance.new("ScrollingFrame")
+Container.Size = UDim2.new(1, -20, 1, -65)
+Container.Position = UDim2.new(0, 10, 0, 55)
+Container.BackgroundTransparency = 1
+Container.BorderSizePixel = 0
+Container.ScrollBarThickness = 4
+Container.ScrollBarImageColor3 = Color3.fromRGB(140, 40, 255)
+Container.Parent = MainFrame
 
--- Вспомогательная функция для создания красивых кнопок
-local function createButton(text, layoutOrder)
-	local button = Instance.new("TextButton")
-	button.Size = UDim2.new(0, 210, 0, 40)
-	button.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-	button.BorderSizePixel = 0
-	button.Text = text
-	button.TextColor3 = Color3.fromRGB(255, 255, 255)
-	button.Font = Enum.Font.SourceSans
-	button.TextSize = 16
-	button.LayoutOrder = layoutOrder
-	button.Parent = MainFrame
+local Layout = Instance.new("UIListLayout")
+Layout.Padding = UDim.new(0, 8)
+Layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+Layout.SortOrder = Enum.SortOrder.LayoutOrder
+Layout.Parent = Container
+
+Layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+	Container.CanvasSize = UDim2.new(0, 0, 0, Layout.AbsoluteContentSize.Y + 20)
+end)
+
+function _G.CreateCheatButton(text, stateKey, callback)
+	local Btn = Instance.new("TextButton")
+	Btn.Size = UDim2.new(1, -10, 0, 38)
+	Btn.BackgroundColor3 = Color3.fromRGB(24, 18, 32)
+	Btn.Text = text
+	Btn.TextColor3 = Color3.fromRGB(200, 200, 200)
+	Btn.Font = Enum.Font.GothamMedium
+	Btn.TextSize = 13
+	Btn.AutoButtonColor = false
+	Btn.Parent = Container
 	
-	local btnCorner = Instance.new("UICorner")
-	btnCorner.CornerRadius = UDim.new(0, 6)
-	btnCorner.Parent = button
+	local Corner = Instance.new("UICorner")
+	Corner.CornerRadius = UDim.new(0, 6)
+	Corner.Parent = Btn
 	
-	return button
+	local Stroke = Instance.new("UIStroke")
+	Stroke.Thickness = 1
+	Stroke.Color = Color3.fromRGB(45, 35, 60)
+	Stroke.Parent = Btn
+	
+	Btn.MouseEnter:Connect(function()
+		TweenService:Create(Btn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(38, 28, 52)}):Play()
+		TweenService:Create(Stroke, TweenInfo.new(0.2), {Color = Color3.fromRGB(140, 40, 255)}):Play()
+	end)
+	Btn.MouseLeave:Connect(function()
+		if not _G.States[stateKey] then
+			TweenService:Create(Btn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(24, 18, 32)}):Play()
+			TweenService:Create(Stroke, TweenInfo.new(0.2), {Color = Color3.fromRGB(45, 35, 60)}):Play()
+		end
+	end)
+	
+	Btn.MouseButton1Click:Connect(function()
+		_G.States[stateKey] = not _G.States[stateKey]
+		callback(_G.States[stateKey])
+		if _G.States[stateKey] then
+			Btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+			TweenService:Create(Btn, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(110, 30, 200)}):Play()
+			Stroke.Color = Color3.fromRGB(200, 100, 255)
+		else
+			Btn.TextColor3 = Color3.fromRGB(200, 200, 200)
+			TweenService:Create(Btn, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(24, 18, 32)}):Play()
+			Stroke.Color = Color3.fromRGB(45, 35, 60)
+		end
+	end)
 end
 
-local EspButton = createButton("Toggle ESP: OFF", 1)
-local FlyButton = createButton("Toggle Fly: OFF", 2)
-local SpeedButton = createButton("Speed Boost (WalkSpeed)", 3)
-
--- Подсказка управления внизу панели
-local Footer = Instance.new("TextLabel")
-Footer.Size = UDim2.new(1, 0, 0, 30)
-Footer.BackgroundTransparency = 1
-Footer.Text = "Press 'P' to Hide/Show"
-Footer.TextColor3 = Color3.fromRGB(150, 150, 150)
-Footer.Font = Enum.Font.SourceSansItalic
-Footer.TextSize = 14
-Footer.LayoutOrder = 4
-Footer.Parent = MainFrame
-
-----------------------------------------------------------------
--- 2. РЕАЛИЗАЦИЯ ФУНКЦИЙ (ESP, FLY, SPEED)
-----------------------------------------------------------------
-
--- [ФУНКЦИЯ 1: ESP (Подсветка игроков)]
-local espEnabled = false
-local espConnections = {}
-
-local function createESP(player)
-	if player == LocalPlayer then return end
+function _G.CreateSlider(name, min, max, default, callback)
+	local SliderBg = Instance.new("Frame")
+	SliderBg.Size = UDim2.new(1, -10, 0, 45)
+	SliderBg.BackgroundColor3 = Color3.fromRGB(24, 18, 32)
+	SliderBg.Parent = Container
 	
-	local function addHighlight(character)
-		if character:FindFirstChild("ESPHighlight") then return end
-		local highlight = Instance.new("Highlight")
-		highlight.Name = "ESPHighlight"
-		highlight.FillColor = Color3.fromRGB(255, 0, 0)
-		highlight.FillTransparency = 0.5
-		highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
-		highlight.OutlineTransparency = 0
-		highlight.Adornee = character
-		highlight.Parent = character
+	local Corner = Instance.new("UICorner")
+	Corner.CornerRadius = UDim.new(0, 6)
+	Corner.Parent = SliderBg
+	
+	local Stroke = Instance.new("UIStroke")
+	Stroke.Thickness = 1
+	Stroke.Color = Color3.fromRGB(45, 35, 60)
+	Stroke.Parent = SliderBg
+	
+	local Label = Instance.new("TextLabel")
+	Label.Size = UDim2.new(1, -16, 0, 20)
+	Label.Position = UDim2.new(0, 10, 0, 2)
+	Label.BackgroundTransparency = 1
+	Label.Text = name .. ": " .. tostring(default)
+	Label.TextColor3 = Color3.fromRGB(180, 170, 190)
+	Label.Font = Enum.Font.GothamSemibold
+	Label.TextSize = 11
+	Label.TextXAlignment = Enum.TextXAlignment.Left
+	Label.Parent = SliderBg
+	
+	local Track = Instance.new("Frame")
+	Track.Size = UDim2.new(1, -20, 0, 5)
+	Track.Position = UDim2.new(0, 10, 0, 28)
+	Track.BackgroundColor3 = Color3.fromRGB(40, 30, 50)
+	Track.BorderSizePixel = 0
+	Track.Parent = SliderBg
+	
+	local Fill = Instance.new("Frame")
+	Fill.Size = UDim2.new((default - min)/(max - min), 0, 1, 0)
+	Fill.BackgroundColor3 = Color3.fromRGB(140, 40, 255)
+	Fill.BorderSizePixel = 0
+	Fill.Parent = Track
+	
+	local isDragging = false
+	local function updateSlider(input)
+		local relativeX = math.clamp((input.Position.X - Track.AbsolutePosition.X) / Track.AbsoluteSize.X, 0, 1)
+		Fill.Size = UDim2.new(relativeX, 0, 1, 0)
+		local val = math.floor(min + (max - min) * relativeX)
+		Label.Text = name .. ": " .. tostring(val)
+		callback(val)
 	end
 	
-	if player.Character then addHighlight(player.Character) end
-	local conn = player.CharacterAdded:Connect(addHighlight)
-	table.insert(espConnections, conn)
+	Track.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then isDragging = true updateSlider(input) end
+	end)
+	UserInputService.InputChanged:Connect(function(input)
+		if isDragging and input.UserInputType == Enum.UserInputType.MouseMovement then updateSlider(input) end
+	end)
+	UserInputService.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then isDragging = false end
+	end)
 end
 
-EspButton.MouseButton1Click:Connect(function()
-	espEnabled = not espEnabled
-	if espEnabled then
-		EspButton.Text = "Toggle ESP: ON"
-		EspButton.BackgroundColor3 = Color3.fromRGB(0, 120, 0)
-		-- Включаем ESP для текущих игроков
-		for _, player in ipairs(Players:GetPlayers()) do
-			createESP(player)
-		end
-		-- Следим за новыми игроками
-		local joinConn = Players.PlayerAdded:Connect(createESP)
-		table.insert(espConnections, joinConn)
-	else
-		EspButton.Text = "Toggle ESP: OFF"
-		EspButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-		-- Очищаем все соединения и подсветки
-		for _, conn in ipairs(espConnections) do conn:Disconnect() end
-		table.clear(espConnections)
-		
-		for _, player in ipairs(Players:GetPlayers()) do
-			if player.Character and player.Character:FindFirstChild("ESPHighlight") then
-				player.Character.ESPHighlight:Destroy()
-			end
-		end
+local dragging, dragInput, dragStart, startPos
+Header.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		dragging = true dragStart = input.Position startPos = MainFrame.Position
+		input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false end end)
+	end
+end)
+Header.InputChanged:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseMovement then dragInput = input end end)
+UserInputService.InputChanged:Connect(function(input)
+	if input == dragInput and dragging then
+		local delta = input.Position - dragStart
+		MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
 	end
 end)
 
+UserInputService.InputBegan:Connect(function(input, processed)
+	if not processed and input.KeyCode == Enum.KeyCode.P then MainFrame.Visible = not MainFrame.Visible end
+end)
+--==================================================================================--
+--               DEXI SCRIPT — ЧАСТЬ 2: ЛОГИКА ФУНКЦИЙ (FUNCTIONS CORE)             --
+--==================================================================================--
 
--- [ФУНКЦИЯ 2: FLY (Локальный Полет)]
-local flyEnabled = false
-local flyConnection = nil
-local flySpeed = 50
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Lighting = game:GetService("Lighting")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
 
-FlyButton.MouseButton1Click:Connect(function()
-	flyEnabled = not flyEnabled
-	local character = LocalPlayer.Character
-	if not character then return end
-	local hrp = character:FindFirstChild("HumanoidRootPart")
-	local humanoid = character:FindFirstChildOfClass("Humanoid")
-	if not hrp or not humanoid then return end
-	
-	if flyEnabled then
-		FlyButton.Text = "Toggle Fly: ON"
-		FlyButton.BackgroundColor3 = Color3.fromRGB(0, 120, 0)
-		
-		-- Создаем локальные силы для удержания в воздухе
-		local bv = Instance.new("BodyVelocity")
-		bv.Name = "FlyVelocity"
-		bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-		bv.Velocity = Vector3.new(0, 0, 0)
-		bv.Parent = hrp
-		
-		humanoid.PlatformStand = true -- Отключаем физику падения анимаций
-		
-		-- Цикл управления полетом при помощи камеры
-		flyConnection = RunService.RenderStepped:Connect(function()
-			local camera = workspace.CurrentCamera
-			local moveDirection = humanoid.MoveDirection
-			
-			-- Куда смотрит камера, туда и летим
-			if moveDirection.Magnitude > 0 then
-				bv.Velocity = camera.CFrame.LookVector * (moveDirection.Magnitude * flySpeed)
-			else
-				bv.Velocity = Vector3.new(0, 0, 0)
+local CONFIG = { FlySpeed = 50, AimbotFov = 200, AimbotSmoothness = 0.1 }
+local Connections = { Esp = {} }
+
+local function GetCharacter() return LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait() end
+local function GetHumanoid() return GetCharacter():WaitForChild("Humanoid", 5) end
+local function GetRootPart() return GetCharacter():WaitForChild("HumanoidRootPart", 5) end
+
+local function GetClosestPlayerToCursor()
+	local closestPlayer, shortestDistance = nil, CONFIG.AimbotFov
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health > 0 then
+			local screenPos, onScreen = Camera:WorldToViewportPoint(player.Character.HumanoidRootPart.Position)
+			if onScreen then
+				local dist = (Vector2.new(screenPos.X, screenPos.Y) - UserInputService:GetMouseLocation()).Magnitude
+				if dist < shortestDistance then shortestDistance = dist closestPlayer = player end
+			end
+		end
+	end
+	return closestPlayer
+end
+
+-- Регистрация ползунков верхнего уровня
+_G.CreateSlider("WalkSpeed (Скорость)", 16, 250, 16, function(value)
+	_G.SliderValues.CurrentSpeed = value
+	_G.States.Speed = (value > 16)
+	local hum = GetHumanoid() if hum then hum.WalkSpeed = value end
+end)
+
+_G.CreateSlider("JumpPower (Прыжок)", 50, 300, 50, function(value)
+	_G.SliderValues.CurrentJump = value
+	_G.States.SuperJump = (value > 50)
+	local hum = GetHumanoid() if hum then hum.UseJumpPower = true hum.JumpPower = value end
+end)
+
+-- Привязка кнопок функционала
+_G.CreateCheatButton("AimBot (Автонаведение на головы)", "Aimbot", function(state)
+	if state then
+		Connections.Aimbot = RunService.RenderStepped:Connect(function()
+			local target = GetClosestPlayerToCursor()
+			if target and target.Character and target.Character:FindFirstChild("Head") then
+				Camera.CFrame = Camera.CFrame:Lerp(CFrame.new(Camera.CFrame.Position, target.Character.Head.Position), CONFIG.AimbotSmoothness)
 			end
 		end)
 	else
-		FlyButton.Text = "Toggle Fly: OFF"
-		FlyButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-		
-		if flyConnection then flyConnection:Disconnect() flyConnection = nil end
-		if hrp:FindFirstChild("FlyVelocity") then hrp.FlyVelocity:Destroy() end
-		if humanoid then humanoid.PlatformStand = false end
+		if Connections.Aimbot then Connections.Aimbot:Disconnect() Connections.Aimbot = nil end
 	end
 end)
 
-
--- [ФУНКЦИЯ 3: SPEED (Скорость бега)]
-local speedBoosted = false
-SpeedButton.MouseButton1Click:Connect(function()
-	local character = LocalPlayer.Character
-	if not character then return end
-	local humanoid = character:FindFirstChildOfClass("Humanoid")
-	if not humanoid then return end
-	
-	speedBoosted = not speedBoosted
-	if speedBoosted then
-		humanoid.WalkSpeed = 100 -- Ваша новая скорость бега
-		SpeedButton.Text = "Speed Boost: 100"
-		SpeedButton.BackgroundColor3 = Color3.fromRGB(0, 120, 0)
+_G.CreateCheatButton("WallHack ESP (Подсветка игроков)", "Esp", function(state)
+	local function applyEsp(p)
+		if p == LocalPlayer then return end
+		local function addHighlight(char)
+			if char:FindFirstChild("DexiESP") then return end
+			local hl = Instance.new("Highlight")
+			hl.Name = "DexiESP"
+			hl.FillColor = Color3.fromRGB(150, 0, 255)
+			hl.FillTransparency = 0.4
+			hl.OutlineColor = Color3.fromRGB(255, 255, 255)
+			hl.Parent = char
+		end
+		if p.Character then addHighlight(p.Character) end
+		table.insert(Connections.Esp, p.CharacterAdded:Connect(addHighlight))
+	end
+	if state then
+		for _, p in ipairs(Players:GetPlayers()) do applyEsp(p) end
+		table.insert(Connections.Esp, Players.PlayerAdded:Connect(applyEsp))
 	else
-		humanoid.WalkSpeed = 16 -- Стандартная скорость Roblox
-		SpeedButton.Text = "Speed Boost (WalkSpeed)"
-		SpeedButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+		for _, c in ipairs(Connections.Esp) do c:Disconnect() end
+		table.clear(Connections.Esp)
+		for _, p in ipairs(Players:GetPlayers()) do
+			if p.Character and p.Character:FindFirstChild("DexiESP") then p.Character.DexiESP:Destroy() end
+		end
 	end
 end)
 
--- Обновление скорости и состояния полета при спавне (если персонаж погиб)
+_G.CreateCheatButton("Fly Mod (Полет по камере)", "Fly", function(state)
+	local hrp, hum = GetRootPart(), GetHumanoid()
+	if state and hrp and hum then
+		local bv = Instance.new("BodyVelocity")
+		bv.Name = "DexiFly"
+		bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+		bv.Parent = hrp
+		hum.PlatformStand = true
+		Connections.Fly = RunService.RenderStepped:Connect(function()
+			bv.Velocity = hum.MoveDirection.Magnitude > 0 and Camera.CFrame.LookVector * (hum.MoveDirection.Magnitude * CONFIG.FlySpeed) or Vector3.new(0,0,0)
+		end)
+	else
+		if Connections.Fly then Connections.Fly:Disconnect() Connections.Fly = nil end
+		if hrp and hrp:FindFirstChild("DexiFly") then hrp.DexiFly:Destroy() end
+		if hum then hum.PlatformStand = false end
+	end
+end)
+
+_G.CreateCheatButton("Noclip (Проход сквозь стены)", "Noclip", function(state)
+	if state then
+		Connections.Noclip = RunService.Stepped:Connect(function()
+			if LocalPlayer.Character then
+				for _, part in ipairs(LocalPlayer.Character:GetChildren()) do
+					if part:IsA("BasePart") then part.CanCollide = false end
+				end
+			end
+		end)
+	else
+		if Connections.Noclip then Connections.Noclip:Disconnect() Connections.Noclip = nil end
+	end
+end)
+
+_G.CreateCheatButton("Infinite Jump (Бесконечный прыжок)", "InfJump", function(state)
+	if state then
+		Connections.InfJump = UserInputService.InputBegan:Connect(function(inp, proc)
+			if not proc and inp.KeyCode == Enum.KeyCode.Space then
+				local hum = GetHumanoid() if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
+			end
+		end)
+	else
+		if Connections.InfJump then Connections.InfJump:Disconnect() Connections.InfJump = nil end
+	end
+end)
+
+_G.CreateCheatButton("Low Gravity (Низкая гравитация)", "LowGravity", function(state)
+	workspace.Gravity = state and 30 or 196.2
+end)
+
+_G.CreateCheatButton("Spin Bot (Вращение)", "SpinBot", function(state)
+	local hrp = GetRootPart()
+	if state and hrp then
+		local bg = Instance.new("BodyAngularVelocity")
+		bg.Name = "DexiSpin"
+		bg.MaxTorque = Vector3.new(0, math.huge, 0)
+		bg.AngularVelocity = Vector3.new(0, 50, 0)
+		bg.Parent = hrp
+	else
+		if hrp and hrp:FindFirstChild("DexiSpin") then hrp.DexiSpin:Destroy() end
+	end
+end)
+
+_G.CreateCheatButton("BunnyHop (Авто-распрыжка)", "Bhop", function(state)
+	if state then
+		Connections.Bhop = RunService.RenderStepped:Connect(function()
+			if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+				local hum = GetHumanoid()
+				if hum and hum.FloorMaterial ~= Enum.Material.Air then hum.Jump = true end
+			end
+		end)
+	else
+		if Connections.Bhop then Connections.Bhop:Disconnect() Connections.Bhop = nil end
+	end
+end)
+
+_G.CreateCheatButton("FullBright (Ночное зрение)", "FullBright", function(state)
+	if state then Lighting.Ambient = Color3.fromRGB(255, 255, 255) Lighting.Brightness = 2 else Lighting.Ambient = Color3.fromRGB(128, 128, 128) Lighting.Brightness = 1 end
+end)
+
+_G.CreateCheatButton("Ctrl + Click Teleport", "ClickTeleport", function(state)
+	if state then
+		local m = LocalPlayer:GetMouse()
+		Connections.ClickTp = m.Button1Down:Connect(function()
+			if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) and m.Target and GetRootPart() then
+				GetRootPart().CFrame = CFrame.new(m.Hit.Position + Vector3.new(0, 3, 0))
+			end
+		end)
+	else
+		if Connections.ClickTp then Connections.ClickTp:Disconnect() Connections.ClickTp = nil end
+	end
+end)
+
+_G.CreateCheatButton("Map X-Ray (Полупрозрачная карта)", "WallHackVision", function(state)
+	for _, p in ipairs(workspace:GetDescendants()) do
+		if p:IsA("BasePart") and not p:IsDescendantOf(LocalPlayer.Character) and not p.Parent:FindFirstChildOfClass("Humanoid") then
+			if state then
+				if not p:GetAttribute("OldTr") then p:SetAttribute("OldTr", p.Transparency) end
+				p.Transparency = 0.7
+			else
+				local o = p:GetAttribute("OldTr") if o then p.Transparency = o p:SetAttribute("OldTr", nil) end
+			end
+		end
+	end
+end)
+
+_G.CreateCheatButton("AutoClicker (Зажмите T)", "AutoClicker", function(state)
+	if state then
+		Connections.AutoClick = RunService.RenderStepped:Connect(function()
+			if UserInputService:IsKeyDown(Enum.KeyCode.T) then
+				local t = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
+				if t then t:Activate() end
+			end
+		end)
+	else
+		if Connections.AutoClick then Connections.AutoClick:Disconnect() Connections.AutoClick = nil end
+	end
+end)
+
 LocalPlayer.CharacterAdded:Connect(function(char)
-	task.wait(1)
-	if speedBoosted then
-		local hum = char:WaitForChild("Humanoid", 5)
-		if hum then hum.WalkSpeed = 100 end
-	end
-	if flyEnabled then
-		-- Сбрасываем кнопку полета, так как старое тело уничтожено
-		flyEnabled = false
-		FlyButton.Text = "Toggle Fly: OFF"
-		FlyButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-		if flyConnection then flyConnection:Disconnect() end
-	end
-end)
-
-
-----------------------------------------------------------------
--- 3. СКРЫТИЕ И ОТКРЫТИЕ ПАНЕЛИ КЛАВИШЕЙ
-----------------------------------------------------------------
-UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
-	if gameProcessedEvent then return end -- Игнорируем нажатия, если игрок пишет в чат
-	if input.KeyCode == Enum.KeyCode.P then
-		MainFrame.Visible = not MainFrame.Visible
+	task.wait(0.6)
+	local hum = char:WaitForChild("Humanoid", 5)
+	if hum then
+		if _G.States.Speed then hum.WalkSpeed = _G.SliderValues.CurrentSpeed end
+		if _G.States.SuperJump then hum.UseJumpPower = true hum.JumpPower = _G.SliderValues.CurrentJump end
 	end
 end)
