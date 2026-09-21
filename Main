@@ -25,6 +25,7 @@ MainFrame.Position = UDim2.new(0.5, -260, 0.5, -160)
 MainFrame.BackgroundColor3 = Color3.fromRGB(13, 10, 18)
 MainFrame.BorderSizePixel = 0
 MainFrame.Active = true
+MainFrame.ClipsDescendants = true
 MainFrame.Parent = ScreenGui
 
 local MainCorner = Instance.new("UICorner")
@@ -218,6 +219,8 @@ end
 -- Конструктор Слайдеров внутри вкладок
 function _G.AddSlider(tabName, name, min, max, default, callback)
 	local targetContainer = _G.Tabs[tabName]
+	if not targetContainer then return end
+	if max == min then return end
 	local SliderBg = Instance.new("Frame")
 	SliderBg.Size = UDim2.new(1, -5, 0, 42)
 	SliderBg.BackgroundColor3 = Color3.fromRGB(25, 20, 32)
@@ -289,7 +292,6 @@ end)
 
 Вставьте этот блок кода в тот же скрипт **строго ниже первой части**. Он регистрирует разделы `Combat`, `Movement`, `Visuals`, `Misc` и активирует все механизмы.
 
-```lua
 --==================================================================================--
 --               DEXI SCRIPT HORIZONTAL PREMIUM UI — ЧАСТЬ 2: FUNCTIONS             --
 --==================================================================================--
@@ -320,8 +322,12 @@ _G.RegisterTab("Misc", 4)
 local function GetClosestPlayer()
 	local closest, shortest = nil, CONFIG.AimbotFov
 	for _, p in ipairs(Players:GetPlayers()) do
-		if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") and p.Character:FindFirstChild("Humanoid") and p.Character.Humanoid.Health > 0 then
-			local pos, onScreen = Camera:WorldToViewportPoint(p.Character.HumanoidRootPart.Position)
+		local character = p.Character
+		local head = character and character:FindFirstChild("Head")
+		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		local root = character and character:FindFirstChild("HumanoidRootPart")
+		if p ~= LocalPlayer and head and humanoid and root and humanoid.Health > 0 then
+			local pos, onScreen = Camera:WorldToViewportPoint(root.Position)
 			if onScreen then
 				local d = (Vector2.new(pos.X, pos.Y) - UserInputService:GetMouseLocation()).Magnitude
 				if d < shortest then shortest = d closest = p end
@@ -333,6 +339,7 @@ end
 
 _G.AddButton("Combat", "AimBot (Наведение на головы)", "Aimbot", function(state)
 	if state then
+		if Connections.Aimbot then Connections.Aimbot:Disconnect() end
 		Connections.Aimbot = RunService.RenderStepped:Connect(function()
 			local target = GetClosestPlayer()
 			if target and target.Character:FindFirstChild("Head") then
@@ -346,6 +353,7 @@ end)
 
 _G.AddButton("Combat", "TriggerBot (Автовыстрел при наведении)", "Trigger", function(state)
 	if state then
+		if Connections.Trigger then Connections.Trigger:Disconnect() end
 		Connections.Trigger = RunService.RenderStepped:Connect(function()
 			local mouse = LocalPlayer:GetMouse()
 			if mouse.Target and mouse.Target.Parent:FindFirstChildOfClass("Humanoid") then
@@ -374,6 +382,9 @@ end)
 _G.AddButton("Movement", "Fly Mod (Полет по камере)", "Fly", function(state)
 	local hrp, hum = GetRoot(), GetHum()
 	if state and hrp and hum then
+		if Connections.Fly then Connections.Fly:Disconnect() end
+		local oldBv = hrp:FindFirstChild("DexiFly")
+		if oldBv then oldBv:Destroy() end
 		local bv = Instance.new("BodyVelocity")
 		bv.Name = "DexiFly"
 		bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
@@ -505,6 +516,8 @@ end)
 _G.AddButton("Misc", "Spin Bot (Локальное вращение)", "Spin", function(state)
 	local hrp = GetRoot()
 	if state and hrp then
+		local oldBg = hrp:FindFirstChild("DexiSpin")
+		if oldBg then oldBg:Destroy() end
 		local bg = Instance.new("BodyAngularVelocity")
 		bg.Name = "DexiSpin"
 		bg.MaxTorque = Vector3.new(0, math.huge, 0)
@@ -521,25 +534,30 @@ function _G.SelfDestructCore()
 		if type(c) == "table" then for _, v in ipairs(c) do v:Disconnect() end
 		elseif c then c:Disconnect() end
 	end
+	if Connections.CharacterAdded then
+		Connections.CharacterAdded:Disconnect()
+		Connections.CharacterAdded = nil
+	end
 	local hrp, hum = GetRoot(), GetHum()
 	if hrp and hrp:FindFirstChild("DexiFly") then hrp.DexiFly:Destroy() end
 	if hrp and hrp:FindFirstChild("DexiSpin") then hrp.DexiSpin:Destroy() end
 	if hum then hum.PlatformStand = false end
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p.Character then
+			local esp = p.Character:FindFirstChild("DexiESP")
+			if esp then esp:Destroy() end
+		end
+	end
 	Lighting.Ambient = Color3.fromRGB(128, 128, 128)
 end
 
 -- Хук автореспавна персонажа
-LocalPlayer.CharacterAdded:Connect(function(char)
+Connections.CharacterAdded = LocalPlayer.CharacterAdded:Connect(function(char)
 	task.wait(0.6)
 local hum = char:WaitForChild("Humanoid", 5)
-if hum thenhum.WalkSpeed = _G.SliderValues.CurrentSpeed
+if hum then
+	hum.WalkSpeed = _G.SliderValues.CurrentSpeed
 if _G.SliderValues.CurrentJump > 50 then hum.UseJumpPower = true hum.JumpPower = 
 _G.SliderValues.CurrentJump end
 end
 end)
-
-<FollowUp>
-Если всё запустилось успешно, сообщите:
-* Успевают ли ползунки реагировать на **резкие движения мыши**?
-* Хотите ли вы добавить **Keybind System (визуальное назначение любой клавиши)** на кнопки чита прямо из меню?
-</FollowUp>
